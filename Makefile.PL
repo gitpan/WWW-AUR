@@ -3,7 +3,9 @@ use inc::Module::Install;
 name         'WWW-AUR';
 version_from 'lib/WWW/AUR.pm';
 author_from  'lib/WWW/AUR.pod';
+license      'perl';
 
+requires 'Archive::Tar'   => 0;
 requires 'Carp'           => 0;
 requires 'HTTP::Cookies'  => 0;
 requires 'Text::Balanced' => 0;
