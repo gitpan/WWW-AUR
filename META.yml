@@ -1,5 +1,4 @@
 ---
-abstract: 'API for the Archlinux User Repository website.'
 author:
   - 'Justin Davis, C<< <juster at cpan dot org> >>'
 build_requires:
@@ -7,8 +6,8 @@ build_requires:
 configure_requires:
   ExtUtils::MakeMaker: 6.42
 distribution_type: module
-generated_by: 'Module::Install version 0.95'
-license: gpl
+generated_by: 'Module::Install version 1.00'
+license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
@@ -19,14 +18,18 @@ no_index:
     - t
     - xt
 requires:
+  Archive::Tar: 0
   Carp: 0
   Cwd: 0
-  File::Path: 0
+  File::Path: 2.06
   File::Spec: 0
   HTTP::Cookies: 0
-  LWP::Simple: 0
+  JSON: 0
+  LWP::UserAgent: 0
   Text::Balanced: 0
   URI: 0
+  parent: 0
 resources:
-  license: http://opensource.org/licenses/gpl-license.php
-version: 0.01
+  license: http://dev.perl.org/licenses/
+  repository: http://github.com/juster/perl-www-aur
+version: 0.03
