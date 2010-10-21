@@ -3,6 +3,7 @@ author:
   - 'Justin Davis, C<< <juster at cpan dot org> >>'
 build_requires:
   ExtUtils::MakeMaker: 6.42
+  Test::More: 0.87_01
 configure_requires:
   ExtUtils::MakeMaker: 6.42
 distribution_type: module
@@ -21,6 +22,7 @@ requires:
   Archive::Tar: 0
   Carp: 0
   Cwd: 0
+  Fcntl: 0
   File::Path: 2.06
   File::Spec: 0
   HTTP::Cookies: 0
@@ -32,4 +34,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/juster/perl-www-aur
-version: 0.04
+version: 0.05
