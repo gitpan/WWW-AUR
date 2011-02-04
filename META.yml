@@ -14,10 +14,16 @@ meta-spec:
   version: 1.4
 name: WWW-AUR
 no_index:
+  dir:
+    - ex
   directory:
     - inc
     - t
     - xt
+  package:
+    - WWW::AUR::RPC
+    - WWW::AUR::URI
+    - WWW::AUR::UserAgent
 requires:
   Archive::Tar: 0
   Carp: 0
@@ -28,10 +34,8 @@ requires:
   HTTP::Cookies: 0
   JSON: 0
   LWP::UserAgent: 0
-  Text::Balanced: 0
   URI: 0
-  parent: 0
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/juster/perl-www-aur
-version: 0.05
+version: 0.06

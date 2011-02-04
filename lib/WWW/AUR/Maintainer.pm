@@ -1,6 +1,6 @@
 package WWW::AUR::Maintainer;
 
-use warnings;
+use warnings 'FATAL' => 'all';
 use strict;
 
 use Carp qw();
@@ -61,7 +61,7 @@ WWW::AUR::Maintainer - List packages owned by a given maintainer.
 
 If the maintainer matching the given name does not exist, it is hard
 to tell. Currently if a bad maintainer name is given, the results
-of L<METHODS/packages> will return an empty list.
+of L</packages> will return an empty list.
 
 =over 4
 
@@ -69,11 +69,10 @@ of L<METHODS/packages> will return an empty list.
 
 The name of the maintainer.
 
-=item C<%PATH_PARAMS> (Optional)
+=item C<%PATH_PARAMS> B<(Optional)>
 
 These are propogated to the L<WWW::AUR::Package> objects created by
-L<METHODS/packages>. See L<WWW::AUR/PATH PARAMETERS> for
-more info.
+L</packages>. See L<WWW::AUR/PATH PARAMETERS> for more info.
 
 =back
 
@@ -115,15 +114,11 @@ Justin Davis, C<< <juster at cpan dot org> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-www-aur at
-rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=WWW-AUR>.  I will be
-notified, and then you'll automatically be notified of progress on
-your bug as I make changes.
+Please email me any bugs you find. I will try to fix them as quick as I can.
 
 =head1 SUPPORT
 
-Read the manual first.  Send me an email if you still need help.
+Send me an email if you have any questions or need help.
 
 =head1 LICENSE AND COPYRIGHT
 

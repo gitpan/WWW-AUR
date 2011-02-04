@@ -1,15 +1,17 @@
 package WWW::AUR::UserAgent;
 
-use warnings;
+use warnings 'FATAL' => 'all';
 use strict;
 
-use WWW::AUR::Var;
-use parent qw(LWP::UserAgent);
+use LWP::UserAgent;
+use WWW::AUR;
+
+our @ISA = qw(LWP::UserAgent);
 
 sub new
 {
     my $class = shift;
-    $class->SUPER::new( agent => $USERAGENT, @_ );
+    $class->SUPER::new( agent => $WWW::AUR::USERAGENT, @_ );
 }
 
 1;

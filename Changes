@@ -1,0 +1,96 @@
+Changes -*- org -*-
+  ____ _                              _                
+ / ___| |__   __ _ _ __   __ _  ___  | |    ___   __ _ 
+| |   | '_ \ / _` | '_ \ / _` |/ _ \ | |   / _ \ / _` |
+| |___| | | | (_| | | | | (_| |  __/ | |__| (_) | (_| |
+ \____|_| |_|\__,_|_| |_|\__, |\___| |_____\___/ \__, |
+                         |___/                   |___/ 
+
+* Release 0.06 [2011-02-04 Fri]
+
+** POD Documentation
+
+Fixes many errors in the documentation.
+
+** PKGBUILD Parsing
+
+PKGBUILD parsing is now more resilient. The parsing is still far from
+perfect but strange quotations now result in the same value that bash
+gives them. I have also changed how parsing works, internally. I
+suspect it is more efficient than previously.
+
+** Org-mode documentation
+
+I've decided to switch to Emacs's org-mode for all README and
+changelog files in my own projects.
+
+** Logins
+
+*** HTTPS Logins
+
+All actions taken while logged in now use HTTPS in order to secure
+the login's session key. This also requires the Crypt::SSLeay
+module to be installed if you want to login and do stuff.
+
+*** Multilingual Logins
+
+Multilingual logins will now work properly. The internal webpage
+requests are set to English so the module only has to check for errors
+in one language.
+   
+** Delete Action Added
+
+Adds the delete package action in case any Trusted User wants to
+use this module to delete packages. It is kind of scary what you
+can do with it but heck... I trust you!
+
+* Old GNU-style ChangeLog Entries:
+
+2010-10-21  Justin Davis  <juster@cpan.org>
+
+	* RELEASE (0.05)
+
+	* lib/WWW/AUR/Package/File.pm: Extracted package file code
+	from lib/WWW/AUR/Package/File.pm.
+
+	* lib/WWW/AUR/PKGBUILD.pm: Extracted PKGBUILD code from
+	lib/WWW/AUR/Package.pm.
+
+2010-10-09  Justin Davis  <juster@cpan.org>
+
+	* RELEASE (0.04)
+
+	* lib/WWW/AUR.pod: Fix docs for PATH PARAMETERS. They still had
+	sigils on their names from when I copy/pasted.
+
+	* RELEASE (0.03)
+
+	* Makefile.PL: Add module requirements I forgot about.
+
+	* lib/WWW/AUR/Package.pod: Fix typo in docs (%BUILD_PARMAS).
+	Add info() method.
+
+	* lib/WWW/AUR/Login.pm: Remove 'Returns' and 'Parameters'
+	in documentation. Add documentation for action methods
+	and upload method.
+
+	* lib/WWW/AUR/Maintainer.pm: Remove 'Returns' and 'Parameters'
+	in documentation.
+
+	* lib/WWW/AUR/Iterator.pm: Remove 'Returns' and 'Parameters'
+	in documentation.
+
+	* lib/WWW/AUR.pod: Fix wrong usage of 'upload' in SYNOPSIS.
+
+2010-10-07  Justin Davis  <juster@cpan.org>
+
+	* RELEASE (0.02)
+
+	* lib/WWW/AUR/Package.pm (extract): Use the Archive::Tar module
+	instead of the 'bsdtar' command to extract .tar.gz source package
+	files.
+
+2010-10-04  Justin Davis  <juster@cpan.org>
+
+	* RELEASE (0.01)
+

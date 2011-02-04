@@ -1,9 +1,8 @@
 package WWW::AUR::PKGBUILD;
 
-use warnings;
+use warnings 'FATAL' => 'all';
 use strict;
 
-use Text::Balanced qw(extract_delimited extract_bracketed);
 use Fcntl          qw(SEEK_SET);
 use Carp           qw();
 
@@ -19,37 +18,57 @@ sub new
 #---HELPER FUNCTION---
 sub _unquote_bash
 {
-    my ($bashtext) = @_;
+    my ($bashtext, $start) = @_;
     my $elem;
 
-    # Extract the values of a bash array...
-    if ( $bashtext =~ s/ \A [(] ([^)]*) [)] (.*) \z /$1/xms ) {
-        my ( $arrtext, @result );
+    $start ||= 0;
+    ( pos $bashtext ) = $start;
 
-        ( $arrtext, $bashtext ) = ( $1, $2 );
-        while ( length $arrtext ) {
-            ( $elem, $arrtext ) = _unquote_bash( $arrtext );
-            $arrtext =~ s/ \A \s+ //xms;
-            push @result, $elem;
+    # Extract the values of a bash array...
+    if ( $bashtext =~ / \G [(] ([^)]*) [)] /gcx ) {
+        my $arrtext = $1;
+        my @result;
+
+        ARRAY_LOOP:
+        while ( 1 ) {
+            my ($elem, $elem_end) = _unquote_bash( $arrtext, pos $arrtext );
+            push @result, $elem if $elem;
+
+            # There should only be spaces leftover.
+            ( pos $arrtext ) = $elem_end;
+            last ARRAY_LOOP if ( $elem_end >= length $arrtext ||
+                                 $arrtext !~ /\G\s+/g );
         }
 
-        return ( \@result, $bashtext );
+        # Arrays are special, we do not recurse after we find one.
+        return \@result, pos $bashtext;
     }
+
+    # The rest is for string "parsing"...
 
     # Single quoted strings cannot escape the quote (')...
-    if ( $bashtext =~ / \A ' (.+?) ' (.*) \z /xms ) {
-        ( $elem, $bashtext ) = ( $1, $2 );
+    if ( $bashtext =~ /\G'([^']*)'/gc ) {
+        $elem = $1;
     }
     # Double quoted strings can...
-    elsif ( substr $bashtext, 0, 1 eq q{"} ) {
-        ( $elem, $bashtext ) = extract_delimited( $bashtext, q{"} );
+    elsif ( $bashtext =~ /\G"/gc ) {
+        my $beg = pos $bashtext;
+        # Skip past escaped double-quotes and non-double-quote chars.
+        while ( $bashtext =~ / \G (?: \\" | [^"] ) /gcx ) { ; }
+
+        $elem = substr $bashtext, $beg, ( pos $bashtext ) - $beg;
+        ++( pos $bashtext ); # skip the closing "
     }
     # Otherwise regular words are treated as one element...
-    else {
-        ( $elem, $bashtext ) = $bashtext =~ / \A (\S+) (.+) \z /xms;
+    elsif ( $bashtext =~ /\G([^ \n\t'"]+)/gc ) {
+        $elem = $1;
     }
+    # If none of the above matches, then we stop recursion.
+    else { return q{}, $start; }
 
-    return ( $elem, $bashtext );
+    # We recurse in order to concatenate adjacent strings.
+    my ( $next_elem, $next_end ) = _unquote_bash( $bashtext, pos $bashtext );
+    return ( $elem . $next_elem, $next_end );
 }
 
 #---HELPER FUNCTION---
@@ -74,14 +93,12 @@ sub _pkgbuild_fields
     my ($pbtext) = @_;
 
     my %pbfields;
-    while ( $pbtext =~ / ^ (\w+) = /xmsg ) { 
+    while ( $pbtext =~ / \G .*? \n? ^ (\w+) = /gxms ) { 
         my $name = $1;
-        my $value;
-
-        $pbtext = substr $pbtext, pos $pbtext;
-        ( $value, $pbtext ) = _unquote_bash( $pbtext );
+        my ( $value, $endpos ) = _unquote_bash( $pbtext, pos $pbtext );
 
         $pbfields{ $name } = $value;
+        ( pos $pbtext ) = $endpos;
     }
 
     for my $depkey ( qw/ depends conflicts / ) {
@@ -138,12 +155,12 @@ sub _def_field_acc
     }
 }
 
-_def_field_acc( $_ ) for ( qw{ pkgname pkgver pkgdesc pkgrel url
-                               license install changelog source
-                               noextract md5sums sha1sums sha256sums
-                               sha384sums sha512sums groups arch
-                               backup depends makedepends optdepends
-                               conflicts provides replaces options } );
+_def_field_acc( $_ ) for qw{ pkgname pkgver pkgdesc pkgrel url
+                             license install changelog source
+                             noextract md5sums sha1sums sha256sums
+                             sha384sums sha512sums groups arch
+                             backup depends makedepends optdepends
+                             conflicts provides replaces options };
 
 1;
 
@@ -163,8 +180,9 @@ WWW::AUR::PKGBUILD - Parse PKGBUILD files created for makepkg
   close $fh;
   
   # Or read from text
-  my $pbtext = do { local (@ARGV, $/) = 'PKGBUILD' };
-  my $pb = WWW::AUR::PKGBUILD->new( $pbtext );
+  my $pbtext = do { local (@ARGV, $/) = 'PKGBUILD'; <> };
+  my $pbobj  = WWW::AUR::PKGBUILD->new( $pbtext );
+  my %pb     = $pbobj->fields();
 
   # Array fields are converted into arrayrefs...
   my $deps = join q{, }, @{ $pb{depends} };
@@ -188,15 +206,16 @@ extracted into a hash. Bash arrays are extracted into an arrayref
 (ie depends, makedepends, source).
 
 Remember, bash is more lenient about using arrays than perl is. Bash
-treats one-element arrays as simple values and vice-versa. Perl
-doesn't. I might use a module to copy bash's behavior later on.
+treats one-element arrays the same as non-array parameters and
+vice-versa. Perl doesn't. I might use a module to copy bash's behavior
+later on.
 
 =head1 CONSTRUCTOR
 
   $OBJ = WWW::AUR::PKGBUILD->new( $PBTEXT | $PBFILE );
 
 All this does is create a new B<WWW::AUR::PKGBUILD> object and
-then call the L<read/> method with the provided arguments.
+then call the L</read> method with the provided arguments.
 
 =over 4
 
@@ -299,16 +318,11 @@ Justin Davis, C<< <juster at cpan dot org> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-www-aur at
-rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=WWW-AUR>.  I will be
-notified, and then you'll automatically be notified of progress on
-your bug as I make changes.
+Please email me any bugs you find. I will try to fix them as quick as I can.
 
 =head1 SUPPORT
 
-Send me an email at the above address if you have any questions or
-need help.
+Send me an email if you have any questions or need help.
 
 =head1 LICENSE AND COPYRIGHT
 

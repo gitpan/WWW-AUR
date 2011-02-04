@@ -1,18 +1,19 @@
 package WWW::AUR::Login;
 
-use warnings;
+use warnings 'FATAL' => 'all';
 use strict;
 
 use HTTP::Cookies  qw();
 use Carp           qw();
 
+use WWW::AUR::Maintainer;
 use WWW::AUR::UserAgent;
-use WWW::AUR::Var;
 use WWW::AUR::URI;
+use WWW::AUR qw( _category_index );
 
-use parent qw(WWW::AUR::Maintainer);
+our @ISA = qw(WWW::AUR::Maintainer);
 
-my $UPLOADURI      = "${BASEURI}/pkgsubmit.php";
+my $UPLOADURI      = "https://$WWW::AUR::HOST/pkgsubmit.php";
 my $COOKIE_NAME    = 'AURSID';
 my $BAD_LOGIN_MSG  = 'Bad username or password.';
 my $PKG_EXISTS_MSG = ( 'You are not allowed to overwrite the '
@@ -20,6 +21,23 @@ my $PKG_EXISTS_MSG = ( 'You are not allowed to overwrite the '
 my $PKG_EXISTS_ERR = 'You tried to submit a package you do not own';
 
 my $PKGOUTPUT_MATCH = qr{ <p [ ] class="pkgoutput"> ( [^<]+ ) </p> }xms;
+
+sub _new_cookie_jar
+{
+    my $jar = HTTP::Cookies->new();
+
+    my ($domain, $port) = split /:/, $WWW::AUR::HOST;
+    $port ||= 443; # we use https for logins
+
+    # This REALLY should take a hash as argument...
+    $jar->set_cookie( 0, 'AURLANG' => 'en', # version, key, val
+                      '/', $domain, $port,  # path, domain, port
+                      0, 0,                 # path_spec, secure
+                      0, 0,                 # maxage, discard
+                      {} );                 # rest
+
+    return $jar;
+}
 
 sub new
 {
@@ -29,45 +47,50 @@ sub new
         unless @_ >= 2;
     my ($name, $password) = @_;
 
-    my $ua   = WWW::AUR::UserAgent->new( agent      => $USERAGENT,
-                                         cookie_jar => HTTP::Cookies->new() );
-    my $resp = $ua->post( $BASEURI,
-                          [ user   => $name,
-                            passwd => $password ]);
+    my $ua   = WWW::AUR::UserAgent->new( agent      => $WWW::AUR::USERAGENT,
+                                         cookie_jar => _new_cookie_jar());
+    my $resp = $ua->post( "https://$WWW::AUR::HOST/index.php",
+                          [ user => $name, passwd => $password ] );
 
     Carp::croak 'Failed to login to AUR: bad username or password'
         if $resp->content =~ /$BAD_LOGIN_MSG/;
 
-    Carp::croak 'Failed to login to AUR: ' . $resp->status_line
-        if ! $resp->is_success && $resp->code != 302;
+    unless ( $resp->code == 302 ) {
+        Carp::croak 'Failed to login to AUR: ' . $resp->status_line
+            unless $resp->is_success;
+    }
 
     my $self = $class->SUPER::new( $name );
-    $self->{password}  = $password;
-    $self->{useragent} = $ua;
+    $self->{'useragent'} = $ua;
     return $self;
 }
 
 my %_PKG_ACTIONS = map { ( lc $_ => "do_$_" ) }
-    qw{ Adopt Disown Vote UnVote Notify UnNotify Flag UnFlag };
+    qw{ Adopt Disown Vote UnVote Notify UnNotify Flag UnFlag Delete };
 
 sub _do_pkg_action
 {
     my ($self, $act, $pkg, @params) = @_;
 
+    Carp::croak 'Please provide a proper package ID/name/obj argument'
+        unless $pkg;
+
     my $action = $_PKG_ACTIONS{ $act }
         or Carp::croak "$act is not a valid action for a package";
 
     my $id   = _pkgid( $pkg );
-    my $ua   = $self->{useragent};
-    my $resp = $ua->post( pkg_uri( ID => $id ),
-                          [ "IDs[$id]" => 1, 'ID' => $id,
-                            $action    => 1, @params ] );
+    my $ua   = $self->{'useragent'};
+    my $uri  = pkg_uri( 'https' => 1, 'ID' => $id );
+    my $resp = $ua->post( $uri, [ "IDs[$id]" => 1,
+                                  'ID'       => $id,
+                                  $action    => 1,
+                                  @params ] );
 
     Carp::croak 'Failed to send package action: ' . $resp->status_line
-        if ! $resp->is_success;
+        unless $resp->is_success;
 
     my ($pkgoutput) = $resp->content =~ /$PKGOUTPUT_MATCH/;
-    Carp::croak 'Failed to parse package action response'
+    Carp::confess 'Failed to parse package action response'
         unless $pkgoutput;
 
     return $pkgoutput;
@@ -92,20 +115,31 @@ sub _pkgid
     return $pkg->id;
 }
 
+#---HELPER FUNCTION---
+# If provided pkg is an object, call its name method, otherwise pass through.
+sub _pkgdesc
+{
+    my ($pkg) = @_;
+    my $name;
+    return $name if $name = eval { $pkg->name };
+    return $pkg;
+}
+
 sub _def_action_method
 {
     my ($name, $goodmsg) = @_;
     
-    my $method = sub {
+    no strict 'refs';
+    *{ $name } = sub {
         my ($self, $pkg) = @_;
+
         my $txt = $self->_do_pkg_action( $name => $pkg );
-        Carp::croak qq{Failed to perform the $name action on package "$pkg"}
-            unless $txt =~ /\A$goodmsg/;
+        unless ( $txt =~ /\A$goodmsg/ ) {
+            Carp::confess sprintf qq{%s action on "%s" failed:\n%s\n},
+                ucfirst $name, _pkgdesc( $pkg ), $txt;
+        }
         return $txt;
     };
-
-    no strict 'refs';
-    *{ "WWW::AUR::Login::$name" } = $method;
 
     return;
 }
@@ -132,6 +166,23 @@ while ( my ($name, $goodmsg) = each %_ACTIONS ) {
     _def_action_method( $name, $goodmsg );
 }
 
+sub delete
+{
+    my ($self, $pkg) = @_;
+
+    my $txt = $self->_do_pkg_action( 'delete'         => $pkg,
+                                     'confirm_Delete' => 1 );
+
+    unless ( $txt =~ /\AThe selected packages have been deleted[.]/ ) {
+        my $msg = sprintf q{Failed to perform the delete action on }
+            . q{package "%s"}, _pkgdesc( $pkg );
+        Carp::croak $msg;
+    }
+
+    return $txt;
+
+}
+
 sub upload
 {
     my ($self, $pkgfile_path, $catname) = @_;
@@ -139,7 +190,7 @@ sub upload
     Carp::croak "Given file path ($pkgfile_path) does not exist"
         unless -f $pkgfile_path;
 
-    my $catidx = category_index( $catname );
+    my $catidx = _category_index( $catname );
     my $ua     = $self->{useragent};
     my $resp   = $ua->post( $UPLOADURI,
                             'Content-Type' => 'form-data',
@@ -193,7 +244,7 @@ WWW::AUR::Login - Login to the AUR and manage packages, vote, etc.
   $login->unflag( 'up-to-date-package' );
   
   # Upload a new package file...
-  $login->upload( '/path/to/package-file.src.tar.gz' );
+  $login->upload( '/path/to/package-file.src.tar.gz', 'devel' );
   
   # Use the inherited WWW::AUR::Maintainer accessors.
   my $name     = $login->name;
@@ -221,9 +272,7 @@ The AUR user name to login as.
 
 The password needed to login as the specified user.
 
-=back
-
-=head2 Errors
+=item B<Errors>
 
 The following errors messages are thrown with C<Carp::croak> if we
 were unable to login to the AUR.
@@ -243,29 +292,35 @@ I<< <LWP error> >>.
 
 =back
 
+=back
+
 =head1 METHODS
 
 =head2 adopt disown [un]vote [un]notify [un]flag
 
-  $HTML = $OBJ->adopt( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->disown( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->unvote( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->vote( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->unnotify( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->notify( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->unflag( $PKGID | $PKGNAME | $PKGOBJ );
-  $HTML = $OBJ->flag( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->adopt( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->disown( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->unvote( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->vote( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->unnotify( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->notify( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->unflag( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->flag( $PKGID | $PKGNAME | $PKGOBJ );
+  $MSG = $OBJ->delete( $PKGID | $PKGNAME | $PKGOBJ );
 
 If you are an AUR maintainer you already know what these do. These
 actions are the same actions you can perform to a package (with
 buttons on the webpage) when you are logged in.
 
+In order to use the delete method you must be logged in as a
+Trusted User.
+
 =over 4
 
-=item C<$HTML>
+=item C<$MSG>
 
-The HTML text of the response given when we performed the action. You
-probably don't need to use this.
+This is the message displayed at the top of the page by the AUR after
+an action is completed. Not really useful but there it is.
 
 =item C<$PKGID>
 
@@ -283,9 +338,7 @@ is looked up in order to find the ID number.
 
 A L<WWW::AUR::Package> object.
 
-=back
-
-=head3 Errors
+=item B<Errors>
 
 =over 4
 
@@ -307,11 +360,15 @@ attempted action. When we scraped the HTML it did not match the output
 we expected. Maybe the AUR website was changed and this module wasn't
 updated?
 
-=item Failed to perform the I<< <action> >> action on package "I<< <package> >>"
+=item I<< <action> >> action on I<< <package> >> failed:\n<< <AUR message> >>
 
-This seems to never really happen. Even if you try to do something silly
-like adopt a package owned by someone else, call C<notify> when you are
-already being notified, etc... AUR will say the action succeeded.
+This hardly happens. If this does it is probably an internal error.
+A stack-trace is printed out. I<< <action> >> is the name of the
+action method, I<< <package> >> is the argument passed to the
+method (converted to a name if possible), I<< <AUR message> >>
+is the message the AUR prints at the top of the webpage.
+
+=back
 
 =back
 
@@ -388,19 +445,15 @@ Justin Davis, C<< <juster at cpan dot org> >>
 
 =head1 BUGS
 
-Please report any bugs or feature requests to C<bug-www-aur at
-rt.cpan.org>, or through the web interface at
-L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=WWW-AUR>.  I will be
-notified, and then you'll automatically be notified of progress on
-your bug as I make changes.
+Please email me any bugs you find. I will try to fix them as quick as I can.
 
 =head1 SUPPORT
 
-Read the manual first.  Send me an email if you still need help.
+Send me an email if you have any questions or need help.
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2010 Justin Davis.
+Copyright 2011 Justin Davis.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
