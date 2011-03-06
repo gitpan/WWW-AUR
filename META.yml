@@ -38,4 +38,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/juster/perl-www-aur
-version: 0.07
+version: 0.08

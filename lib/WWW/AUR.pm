@@ -10,7 +10,7 @@ BEGIN {
     # We must define these as soon as possible. They are used in other
     # WWW::AUR modules. Like the ones we use after this block...
 
-    our $VERSION   = '0.07';
+    our $VERSION   = '0.08';
     our $BASEPATH  = '/tmp/WWW-AUR';
     our $HOST      = 'aur.archlinux.org';
     our $USERAGENT = "WWW::AUR/v${VERSION}";
@@ -51,13 +51,16 @@ sub _def_wrapper_method
     *{ "WWW::AUR::$name" } = sub {
         my $self = shift;
         eval "require $class";
+        if ( $@ ) {
+            Carp::confess "Failed to load $class module:\n$@";
+        }
         return eval { $class->new( @_, %$self ) };
     };
 }
 
 _def_wrapper_method( 'find'       => 'WWW::AUR::Package'    );
 _def_wrapper_method( 'maintainer' => 'WWW::AUR::Maintainer' );
-_def_wrapper_method( 'packages'   => 'WWW::AUR::Iterator'   );
+_def_wrapper_method( 'iter'       => 'WWW::AUR::Iterator'   );
 _def_wrapper_method( 'login'      => 'WWW::AUR::Login'      );
 
 #-----------------------------------------------------------------------------

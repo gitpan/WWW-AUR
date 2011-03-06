@@ -3,8 +3,14 @@ package WWW::AUR::PKGBUILD;
 use warnings 'FATAL' => 'all';
 use strict;
 
-use Fcntl          qw(SEEK_SET);
-use Carp           qw();
+use Fcntl qw(SEEK_SET);
+use Carp  qw();
+
+my @ARRAY_FIELDS = qw{ license source noextract
+                       md5sums sha1sums sha256sums sha384sums sha512sums
+                       groups arch backup depends makedepends conflicts
+                       provides replaces options };
+# We cannot auto-split optdepends because spaces are allowed.
 
 sub new
 {
@@ -18,10 +24,11 @@ sub new
 #---HELPER FUNCTION---
 sub _unquote_bash
 {
-    my ($bashtext, $start) = @_;
+    my ($bashtext, $start, $expander) = @_;
     my $elem;
 
-    $start ||= 0;
+    $expander ||= sub { shift };
+    $start    ||= 0;
     ( pos $bashtext ) = $start;
 
     # Extract the values of a bash array...
@@ -31,7 +38,9 @@ sub _unquote_bash
 
         ARRAY_LOOP:
         while ( 1 ) {
-            my ($elem, $elem_end) = _unquote_bash( $arrtext, pos $arrtext );
+            my ($elem, $elem_end) = _unquote_bash( $arrtext,
+                                                   pos $arrtext,
+                                                   $expander );
             push @result, $elem if $elem;
 
             # There should only be spaces leftover.
@@ -57,34 +66,69 @@ sub _unquote_bash
         while ( $bashtext =~ / \G (?: \\" | [^"] ) /gcx ) { ; }
 
         $elem = substr $bashtext, $beg, ( pos $bashtext ) - $beg;
+        $elem = $expander->( $elem );
         ++( pos $bashtext ); # skip the closing "
     }
     # Otherwise regular words are treated as one element...
     elsif ( $bashtext =~ /\G([^ \n\t'"]+)/gc ) {
-        $elem = $1;
+        $elem = $expander->( $1 );
     }
     # If none of the above matches, then we stop recursion.
     else { return q{}, $start; }
 
     # We recurse in order to concatenate adjacent strings.
-    my ( $next_elem, $next_end ) = _unquote_bash( $bashtext, pos $bashtext );
+    my ( $next_elem, $next_end ) = _unquote_bash( $bashtext,
+                                                  pos $bashtext,
+                                                  $expander );
     return ( $elem . $next_elem, $next_end );
+}
+
+# Perform the simplest parameter expansion possible.
+sub _expand_bash
+{
+    my ($bashstr, $fields_ref) = @_;
+
+    my $expand_field = sub {
+        my $name = shift;
+        return $fields_ref->{ $name } if $fields_ref->{ $name };
+        return qq{\$$name};
+        # TODO: error reporting?
+    };
+    
+    $bashstr =~ s{ \$ ([\w_]+) }
+                 { $expand_field->( $1 ) }gex;
+
+    # TODO: check for special expansion modifiers
+    $bashstr =~ s( \$ { ([^}]+) } )
+                 ( $expand_field->( $1 ) )gex;
+
+    return $bashstr;
 }
 
 #---HELPER FUNCTION---
 sub _depstr_to_hash
 {
     my ($depstr) = @_;
-    my ($pkg, $cmp, $ver) = $depstr =~ / \A ([\w_-]+)
+    my ($pkg, $cmp, $ver) = $depstr =~ / \A ([^=<>]+)
                                          (?: ([=<>]=?)
-                                             ([\w._-]+) )? \z/xms;
+                                             (.*) )? \z/xms;
 
-    Carp::croak "Failed to parse depend string: $_" unless $pkg;
+    Carp::confess "Failed to parse depend string: $_" unless $pkg;
 
     $cmp ||= q{>};
     $ver ||= 0;
     return +{ 'pkg' => $pkg, 'cmp' => $cmp,
               'ver' => $ver, 'str' => $depstr };
+}
+
+sub _provides_to_hash
+{
+    my ($provstr) = @_;
+    my ($pkg, $ver) = $provstr =~ / \A ([^=]+)
+                                    (?: = (.*))?
+                                  /xms;
+    Carp::confess "Failed to parse provides string: $_" unless $pkg;
+    return +{ 'pkg' => $pkg, 'ver' => $ver, 'str' => $provstr };
 }
 
 #---HELPER FUNCTION---
@@ -93,21 +137,44 @@ sub _pkgbuild_fields
     my ($pbtext) = @_;
 
     my %pbfields;
-    while ( $pbtext =~ / \G .*? \n? ^ (\w+) = /gxms ) { 
-        my $name = $1;
-        my ( $value, $endpos ) = _unquote_bash( $pbtext, pos $pbtext );
+    my $expander = sub {
+        _expand_bash( shift, \%pbfields )
+    };
 
+    while ( $pbtext =~ / \G .*? \n? ^ ([\w_]+) = /gxms ) { 
+        my $name = $1;
+        my ( $value, $endpos ) = _unquote_bash( $pbtext,
+                                                pos $pbtext,
+                                                $expander );
         $pbfields{ $name } = $value;
         ( pos $pbtext ) = $endpos;
     }
 
-    for my $depkey ( qw/ depends conflicts / ) {
-        my @fixed;
+    # Split arrays at whitespace for poorly made PKGBUILDs...
+    # also ensures each field has an arrayref.
+    ARRAY_LOOP:
+    for my $arrkey ( @ARRAY_FIELDS ) {
+        next ARRAY_LOOP unless $pbfields { $arrkey };
+        my $val_ref = $pbfields{ $arrkey };
+        $val_ref    = [ $val_ref ] unless ref $val_ref;
+        $val_ref    = [ map { split } @$val_ref ];
 
-        @fixed = map { _depstr_to_hash($_) } @{$pbfields{ $depkey }}
-            if $pbfields{ $depkey };
+        $pbfields{ $arrkey } = $val_ref;
+    }
 
-        $pbfields{ $depkey } = \@fixed;
+    # Convert all depends into hash references...
+    VERSPEC_LOOP:
+    for my $depkey ( qw/ makedepends depends conflicts / ) {
+        next VERSPEC_LOOP unless $pbfields{ $depkey };
+
+        $pbfields{ $depkey }
+            = [ map { _depstr_to_hash($_) } @{ $pbfields{ $depkey } } ];
+    }
+
+    # Provides has no comparison operator and may have no version...
+    if ( $pbfields{'provides'} ) {
+        $pbfields{'provides'} =
+            [ map { _provides_to_hash($_) } @{$pbfields{'provides'}} ];
     }
     
     return %pbfields;

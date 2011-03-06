@@ -8,7 +8,7 @@ use WWW::AUR::PKGBUILD;
 use WWW::AUR::Package;
 use Scalar::Util qw(blessed);
 
-*unquote_bash = $WWW::AUR::PKGBUILD::{'_unquote_bash'};
+*unquote_bash = *WWW::AUR::PKGBUILD::_unquote_bash;
 
 my ($empty) = unquote_bash( q{ <-- Space should fail!} );
 is $empty, q{};
@@ -24,9 +24,11 @@ sub pbtext_ok
 {
     my ($pbtext, $expect_ref, $test_name) = @_;
 
+    my ($line) = reverse caller;
+
     my $pbobj = WWW::AUR::PKGBUILD->new( $pbtext );
     my %parsed = $pbobj->fields;
-    is_deeply( \%parsed, $expect_ref, $test_name );
+    is_deeply( \%parsed, $expect_ref, "line $line: $test_name" );
     return;
 }
 
@@ -55,14 +57,22 @@ pbtext_ok( $pbtext,
              'arch'     => [ 'any' ],
              'license'  => [ 'PerlArtistic', 'GPL' ],
              'options'  => [ '!emptydirs' ],
-             'makedepends' => [ 'perl-test-pod-coverage',
-                                'perl-test-pod' ],
+             'makedepends' => [ { 'pkg' => 'perl-test-pod-coverage',
+                                  'cmp' => '>',
+                                  'ver' => '0',
+                                  'str' => 'perl-test-pod-coverage' },
+                                { 'pkg' => 'perl-test-pod',
+                                  'cmp' => '>',
+                                  'ver' => '0',
+                                  'str' => 'perl-test-pod' },
+                               ],
              'depends'  => [ { 'pkg' => 'perl',
                                'cmp' => '>',
                                'ver' => '0',
                                'str' => 'perl', } ],
-             'provides' => [ 'perl-cpanplus-dist-arch' ],
-             'conflicts' => [], # an empty list is stored
+             'provides' => [ { 'pkg' => 'perl-cpanplus-dist-arch',
+                               'ver' => undef,
+                               'str' => 'perl-cpanplus-dist-arch' } ],
              'url'      => 'http://github.com/juster/perl-cpanplus-dist-arch',
              'md5sums'  => [],
              'source'   => [] },
@@ -112,5 +122,5 @@ $pbtext = <<'END_PKGBUILD';
 arch=(''i686' 'x86_64'')
 END_PKGBUILD
 $pkgbuild = WWW::AUR::PKGBUILD->new( $pbtext );
-is $pkgbuild->arch->[0], 'i686 x86_64';
+is_deeply $pkgbuild->arch, [ qw/ i686 x86_64 / ];
 

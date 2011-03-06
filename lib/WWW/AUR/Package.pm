@@ -138,7 +138,7 @@ sub download
 
 #---PUBLIC METHOD---
 # Purpose: Scrape the package webpage to get the maintainer's name
-sub maintainer
+sub maintainer_name
 {
     my ($self) = @_;
 
@@ -156,13 +156,29 @@ sub maintainer
 
     # Orphaned packages don't have a maintainer...
     return undef if $username eq 'None';
+    return $username;
+}
+
+#---PUBLIC METHOD---
+# Purpose: Returns an object representing the package maintainer.
+sub maintainer
+{
+    my $self  = shift;
+    my $mname = $self->maintainer_name();
+    return undef unless defined $mname;
 
     # Propogate parameters to our new Maintainer object...
-    require WWW::AUR::Maintainer;
-    my %params = _path_params( %$self );
-    my $m_obj  = WWW::AUR::Maintainer->new( $username, %params );
+    Carp::croak 'Only a hash of path parameters are allowed as argument'
+        unless @_ % 2 == 0;
 
-    return $m_obj;
+    require WWW::AUR::Maintainer;
+
+    # Propogate parameters to our new Maintainer object...
+    # Path parameters given as arguments override the path params the
+    # package object was given...
+    my %params = ( _path_params( %$self ), _path_params( @_ ) );
+    my $mobj   = WWW::AUR::Maintainer->new( $mname, %params );
+    return $mobj;
 }
 
 sub _def_file_wrapper
@@ -233,7 +249,11 @@ sub pkgbuild
 
     my $pbtext = $self->_download_pkgbuild;
 
-    return $self->{pkgbuild_obj} = WWW::AUR::PKGBUILD->new( $pbtext );
+    $self->{pkgbuild_txt} = $pbtext;
+    $self->{pkgbuild_obj} = eval { WWW::AUR::PKGBUILD->new( $pbtext ) };
+    Carp::confess if $@; # stack trace
+
+    return $self->{pkgbuild_obj};
 }
 
 1;

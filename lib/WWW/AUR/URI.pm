@@ -21,7 +21,7 @@ sub pkgfile_uri
 sub pkgbuild_uri
 {
     my ($pkgname) = @_;
-    return "http://$WWW::AUR::HOST/packages/$pkgname/$pkgname/PKGBUILD"
+    return "http://$WWW::AUR::HOST/packages/$pkgname/PKGBUILD"
 }
 
 sub pkg_uri
@@ -29,7 +29,7 @@ sub pkg_uri
     my %params = @_;
     my $scheme = delete $params{'https'} ? 'https' : 'http';
     my $uri    = URI->new( "$scheme://$WWW::AUR::HOST/packages.php" );
-    $uri->query_form([ @_ ]);
+    $uri->query_form([ %params ]);
     return $uri->as_string;
 }
 
