@@ -4,13 +4,14 @@ use warnings 'FATAL' => 'all';
 use strict;
 
 use Exporter;
-use Carp qw();
+use Carp       qw();
+use File::Spec qw();
 
 BEGIN {
     # We must define these as soon as possible. They are used in other
     # WWW::AUR modules. Like the ones we use after this block...
 
-    our $VERSION   = '0.08';
+    our $VERSION   = '0.09';
     our $BASEPATH  = '/tmp/WWW-AUR';
     our $HOST      = 'aur.archlinux.org';
     our $USERAGENT = "WWW::AUR/v${VERSION}";

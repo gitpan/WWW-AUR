@@ -22,7 +22,6 @@ no_index:
     - xt
   package:
     - WWW::AUR::RPC
-    - WWW::AUR::URI
     - WWW::AUR::UserAgent
 requires:
   Archive::Tar: 0
@@ -38,4 +37,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/juster/perl-www-aur
-version: 0.08
+version: 0.09

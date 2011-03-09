@@ -90,7 +90,7 @@ sub _expand_bash
 
     my $expand_field = sub {
         my $name = shift;
-        return $fields_ref->{ $name } if $fields_ref->{ $name };
+        return $fields_ref->{ $name } if defined $fields_ref->{ $name };
         return qq{\$$name};
         # TODO: error reporting?
     };
@@ -115,8 +115,10 @@ sub _depstr_to_hash
 
     Carp::confess "Failed to parse depend string: $_" unless $pkg;
 
-    $cmp ||= q{>};
-    $ver ||= 0;
+    # If no cmp operator or version are given, return a condition
+    # that will match any version. (>= 0)
+    ( $cmp, $ver ) = ( q{>=}, 0 ) unless $cmp;
+
     return +{ 'pkg' => $pkg, 'cmp' => $cmp,
               'ver' => $ver, 'str' => $depstr };
 }
@@ -154,21 +156,56 @@ sub _pkgbuild_fields
     # also ensures each field has an arrayref.
     ARRAY_LOOP:
     for my $arrkey ( @ARRAY_FIELDS ) {
-        next ARRAY_LOOP unless $pbfields { $arrkey };
+        unless ( $pbfields{ $arrkey } ) {
+            $pbfields{ $arrkey } = [];
+            next ARRAY_LOOP;
+        }
+
         my $val_ref = $pbfields{ $arrkey };
+
+        # Force the value into being an array...
         $val_ref    = [ $val_ref ] unless ref $val_ref;
-        $val_ref    = [ map { split } @$val_ref ];
+
+        # Filter out stupid (un-needed) trailing /'s
+        # Try to filter out commented items too (common in source arrays)
+        # (These should be done by the parser, eventually)
+        $val_ref    = [ grep { $_ ne q{\\} } # <-- my nemesis
+                        map  { split }       # some don't know how arrays work
+                        map  { s/\A\s+//; s/\s+\z//; $_ }    # trim ws
+                        grep { length } map { s/\#.*//; $_ } # kill comments
+                        @$val_ref ];
 
         $pbfields{ $arrkey } = $val_ref;
+    }
+
+    # optdepends are special, we should only split on newlines
+    if ( $pbfields{'optdepends'} ) {
+        my $optdeps = $pbfields{'optdepends'};
+        $optdeps = [ $optdeps ] unless ref $optdeps;
+
+        # Remember stupid \'s at the end of lines
+        $optdeps = [ grep { length } map { s/\#.*//; $_ }
+                     grep { $_ ne q{\\} }
+                     map { s/\A\s+//; s/\s+\z//; $_ }
+                     @$optdeps ];
+        $pbfields{'optdepends'} = $optdeps;
+    }
+    else {
+        $pbfields{'optdepends'} = [];
     }
 
     # Convert all depends into hash references...
     VERSPEC_LOOP:
     for my $depkey ( qw/ makedepends depends conflicts / ) {
-        next VERSPEC_LOOP unless $pbfields{ $depkey };
+        my @deps = @{ $pbfields{ $depkey } };
+        next VERSPEC_LOOP unless @deps;
 
-        $pbfields{ $depkey }
-            = [ map { _depstr_to_hash($_) } @{ $pbfields{ $depkey } } ];
+        eval {
+            $pbfields{ $depkey } = [ map { _depstr_to_hash($_) } @deps ];
+        };
+        if ( $@ ) {
+            die qq{Error with "$depkey" field:\n$@};
+        }
     }
 
     # Provides has no comparison operator and may have no version...

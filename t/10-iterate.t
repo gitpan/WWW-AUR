@@ -2,7 +2,7 @@
 
 use warnings 'FATAL' => 'all';
 use strict;
-use Test::More tests => 2;
+use Test::More tests => 3;
 
 diag 'Iterating through 100 package names';
 
@@ -10,8 +10,8 @@ use WWW::AUR::Iterator;
 my $iter = WWW::AUR::Iterator->new;
 
 my ( $i, @found ) = 0;
-while ( $i < 100 && ( my $pkgname = $iter->next_name )) {
-    push @found, $pkgname;
+while ( $i < 100 && ( my $pkg = $iter->next )) {
+    push @found, $pkg->{'name'};
     ++$i;
 }
 
@@ -26,10 +26,14 @@ sub check_pkgobjs
     my $iter = WWW::AUR::Iterator->new;
     while ( @$pkgnames_ref ) {
         my $pkgname = shift @$pkgnames_ref;
-        my $pkg     = $iter->next;
+        my $pkg     = $iter->next_obj;
         return 0 unless $pkg->name eq $pkgname;
     }
     return 1;
 }
 
 ok check_pkgobjs( \@found ), 'Package names and package objects match';
+
+my $end = WWW::AUR::Iterator->new;
+$end->{'curridx'} = 100_000;
+ok ! defined $end->next, 'Iterator stops after reaching the end';
