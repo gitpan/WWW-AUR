@@ -94,7 +94,7 @@ sub _expand_bash
         return qq{\$$name};
         # TODO: error reporting?
     };
-    
+
     $bashstr =~ s{ \$ ([\w_]+) }
                  { $expand_field->( $1 ) }gex;
 
@@ -114,10 +114,6 @@ sub _depstr_to_hash
                                              (.*) )? \z/xms;
 
     Carp::confess "Failed to parse depend string: $_" unless $pkg;
-
-    # If no cmp operator or version are given, return a condition
-    # that will match any version. (>= 0)
-    ( $cmp, $ver ) = ( q{>=}, 0 ) unless $cmp;
 
     return +{ 'pkg' => $pkg, 'cmp' => $cmp,
               'ver' => $ver, 'str' => $depstr };
@@ -166,13 +162,18 @@ sub _pkgbuild_fields
         # Force the value into being an array...
         $val_ref    = [ $val_ref ] unless ref $val_ref;
 
-        # Filter out stupid (un-needed) trailing /'s
-        # Try to filter out commented items too (common in source arrays)
+        # Try to filter out common problems people have with defining arrays.
+        # 1) trailing \'s
+        # 2) commented array items (generally a complete line is commented)
+        # 3) depends=('foo=1 bar<2 baz>=3')  (a string separated by spaces)
+        # 4) depends=('turbojpegipp >=1.11') (only in the turbovnc-bin pkg)
         # (These should be done by the parser, eventually)
-        $val_ref    = [ grep { $_ ne q{\\} } # <-- my nemesis
-                        map  { split }       # some don't know how arrays work
-                        map  { s/\A\s+//; s/\s+\z//; $_ }    # trim ws
-                        grep { length } map { s/\#.*//; $_ } # kill comments
+        $val_ref    = [ grep { $_ ne q{\\} } # *1
+                        map  { split }       # *3
+                        map  { s{ \A (\w+) \s+
+                                  ([<>=]{1,2}\d+) }{$1$2}x; $_ } # *4
+                        map  { s/\A\s+//; s/\s+\z//; $_ }        # trim ws
+                        grep { length } map { s/\#.*//; $_ }     # *2
                         @$val_ref ];
 
         $pbfields{ $arrkey } = $val_ref;
@@ -213,7 +214,7 @@ sub _pkgbuild_fields
         $pbfields{'provides'} =
             [ map { _provides_to_hash($_) } @{$pbfields{'provides'}} ];
     }
-    
+
     return %pbfields;
 }
 
@@ -232,7 +233,7 @@ sub _slurp
 sub read
 {
     my $self = shift;
-    $self->{'text'} = ( ref $_[0] eq 'IO' ? _slurp( shift ) : shift );
+    $self->{'text'} = ( ref $_[0] eq 'GLOB' ? _slurp( shift ) : shift );
 
     my %pbfields = _pkgbuild_fields( $self->{'text'} );
     $self->{'fields'} = \%pbfields;    

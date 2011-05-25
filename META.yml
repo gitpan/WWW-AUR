@@ -37,4 +37,4 @@ requires:
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/juster/perl-www-aur
-version: 0.09
+version: 0.10
