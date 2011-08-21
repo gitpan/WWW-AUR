@@ -5,6 +5,7 @@ README
 META.yml
 lib/WWW/AUR/Iterator.pm
 lib/WWW/AUR/Login.pm
+lib/WWW/AUR/Login.pod
 lib/WWW/AUR/Maintainer.pm
 lib/WWW/AUR/Package/File.pm
 lib/WWW/AUR/Package.pm
@@ -14,6 +15,7 @@ lib/WWW/AUR.pm
 lib/WWW/AUR.pod
 lib/WWW/AUR/RPC.pm
 lib/WWW/AUR/URI.pm
+lib/WWW/AUR/URI.pod
 lib/WWW/AUR/UserAgent.pm
 inc/Module/Install/Base.pm
 inc/Module/Install/Can.pm
@@ -35,6 +37,8 @@ t/08-maintainer.t
 t/09-login.t
 t/10-iterate.t
 t/11-parseinwild.t
+t/12-uri.t
+t/13-rpc.t
 t/PKGBUILDs/turbovnc-bin
 xt/manifest.t
 xt/pod.t
