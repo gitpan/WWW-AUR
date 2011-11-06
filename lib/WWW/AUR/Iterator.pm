@@ -3,10 +3,9 @@ package WWW::AUR::Iterator;
 use warnings 'FATAL' => 'all';
 use strict;
 
-use WWW::AUR::UserAgent qw();
 use WWW::AUR::Package   qw();
 use WWW::AUR::URI       qw( pkg_uri );
-use WWW::AUR            qw( _path_params _category_name );
+use WWW::AUR            qw( _path_params _category_name _useragent );
 
 my $PKGID_MATCH = qr{ <td .*? </td> \s*
                       <td .*? >
@@ -53,7 +52,7 @@ sub reset
     $self->{'curridx'}   = 0;
     $self->{'finished'}  = 0;
     $self->{'packages'}  = [];
-    $self->{'useragent'} = WWW::AUR::UserAgent->new();
+    $self->{'useragent'} = _useragent();
     return;
 }
 
@@ -77,34 +76,37 @@ sub _scrape_pkglist
         unless $resp->is_success;
 
     my @pkginfos;
-    my $rows_ref = _split_table_rows( $resp->content );
+    my $rows_ref = _splitrows( $resp->content );
     shift @$rows_ref; # remove the header column
 
     for my $rowhtml ( @$rows_ref ) {
         my ($id) = $rowhtml =~ /$PKGID_MATCH/;
-        my $cols_ref = _strip_row_cols( $rowhtml );
+        my $cols_ref = _splitcols( $rowhtml );
 
-        # Package id, name, version, category #, and maintainer name.
-        my ($name, @ver) = split /\s+/, $cols_ref->[1];
-        push @pkginfos, $id, $name, "@ver", @{$cols_ref}[ 2 .. 4 ];
+        # Store id, name, version, category, votes, desc, and maintainer.
+        my ($name, $ver) = split /\s+/, $cols_ref->[1], 2;
+        push @pkginfos, $id, $name, $ver, @{$cols_ref}[ 0, 2 .. 4 ];
     }
 
     return \@pkginfos;
 }
 
-sub _split_table_rows
+sub _splitrows
 {
     my ($html) = @_;
     my @rows = $html =~ m{ <tr> ( .*? ) </tr> }gxs;
     return \@rows;
 }
 
-sub _strip_row_cols
+sub _splitcols
 {
     my ($rowhtml) = @_;
-    my @cols = ( map { s/\A\s+//; s/\s+\z//; $_ }
-                 map { s/<[^>]+>//g; $_ }
-                 $rowhtml =~ m{ <td [^>]*> ( .*? ) </td> }gxs );
+    my @cols = $rowhtml =~ m{ <td[^>]*> ( .*? ) </td> }gxs;
+    for ( @cols ) {
+        s/<[^>]+>//g; # delete tags
+        s/\A\s+//; s/\s+\z//; # trim whitespace
+    }
+
     return \@cols;
 }
 
@@ -115,16 +117,17 @@ sub next
     # There are no more packages to iterate over...
     return undef if $self->{'finished'};
 
-    my @pkginfo = splice @{ $self->{'packages'} }, 0, 6;
+    my @pkginfo = splice @{ $self->{'packages'} }, 0, 7;
     if ( @pkginfo ) {
-        my $maint = $pkginfo[5];
-        if ( $maint eq 'orphan' ) { undef $maint; }
-        return { 'id'         => $pkginfo[0],
-                 'name'       => $pkginfo[1],
-                 'version'    => $pkginfo[2],
-                 'category'   => _category_name( $pkginfo[3] ),
-                 'desc'       => $pkginfo[4],
-                 'maintainer' => $maint };
+        my $pkg;
+        my @k = qw/id name version cat votes desc/;
+        for my $i (0 .. $#k) {
+            $pkg->{$k[$i]} = $pkginfo[$i];
+        }
+
+        my $maint = $pkginfo[6];
+        $pkg->{'maint'} = ($maint eq 'orphan' ? undef : $maint);
+        return $pkg;
     }
 
     # Load a new batch of packages if our internal list is empty...
@@ -232,9 +235,10 @@ corresponding value.
   |------------+------------------------------------------------|
   | id         | The AUR ID number of the package.              |
   | name       | The name (pkgname) of the package.             |
+  | votes      | The number of votes for the package.           |
   | desc       | The description (pkgdesc) of the package.      |
-  | category   | The AUR category name assigned to the package. |
-  | maintainer | The name of the maintainer of the package.     |
+  | cat        | The AUR category name assigned to the package. |
+  | maint      | The name of the maintainer of the package.     |
   |------------+------------------------------------------------|
 
 =item C<undef>

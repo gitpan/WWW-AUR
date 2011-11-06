@@ -22,7 +22,8 @@ no_index:
     - xt
   package:
     - WWW::AUR::RPC
-    - WWW::AUR::UserAgent
+recommends:
+  LWP::Protocol::https: 6
 requires:
   Archive::Tar: 0
   Carp: 0
@@ -32,10 +33,9 @@ requires:
   File::Spec: 0
   HTTP::Cookies: 0
   JSON: 0
-  LWP::Protocol::https: 6
   LWP::UserAgent: 6
   URI: 0
 resources:
   license: http://dev.perl.org/licenses/
   repository: http://github.com/juster/perl-www-aur
-version: 0.12
+version: 0.13

@@ -11,14 +11,15 @@ BEGIN {
     # We must define these as soon as possible. They are used in other
     # WWW::AUR modules. Like the ones we use after this block...
 
-    our $VERSION   = '0.12';
+    our $VERSION   = '0.13';
     our $BASEPATH  = '/tmp/WWW-AUR';
     our $HOST      = 'aur.archlinux.org';
-    our $USERAGENT = "WWW::AUR/v${VERSION}";
+    our $UA        = 'WWW::AUR::UserAgent';
 
     our @ISA       = qw(Exporter);
     our @EXPORT_OK = qw(_is_path_param _path_params
-                        _category_name _category_index);
+                        _category_name _category_index
+                        _useragent);
 }
 
 use WWW::AUR::RPC;
@@ -125,5 +126,13 @@ sub _category_index
     Carp::croak "$name is not a valid category name";
 }
 
+#---INTERNAL FUNCTION---
+# Create a user-agent object. The class name is specified in $UA.
+sub _useragent
+{
+    our $UA;
+    eval "require $UA" or die;
+    return $UA->new(@_);
+}
 
 1;
