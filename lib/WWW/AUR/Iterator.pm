@@ -174,7 +174,7 @@ WWW::AUR::Iterator - An iterator for looping through all AUR packages.
   $iter->reset;
   while ( my $p = $iter->next ) {
       print "$_:$p->{$_}\n"
-          for qw{ id name version category desc maintainer };
+          for qw{ id name version cat desc maint };
       print "---\n";
   }
   
@@ -301,7 +301,7 @@ Send me an email if you have any questions or need help.
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2011 Justin Davis.
+Copyright 2012 Justin Davis.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of either: the GNU General Public License as published
