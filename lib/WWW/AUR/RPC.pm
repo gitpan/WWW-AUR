@@ -12,8 +12,9 @@ use WWW::AUR            qw( _category_name _useragent );
 my %_RENAME_FOR = ( 'Description' => 'desc',
                     'NumVotes'    => 'votes',
                     'CategoryID'  => 'category',
-                    'LocationID'  => 'location',
                     'OutOfDate'   => 'outdated',
+                    'FirstSubmitted' => 'ctime',
+                    'LastModified' => 'mtime',
                    );
 
 #---HELPER FUNCTION---
@@ -71,7 +72,6 @@ sub multiinfo
     my $data = $json->decode( $resp->content );
 
     if ( $data->{type} eq "error" ) {
-        return () if $data->{results} eq 'No results found';
         Carp::croak "Remote error: $data->{results}";
     }
 
@@ -104,7 +104,6 @@ sub search
         or die 'Failed to decode the search AUR json request';
 
     if ( $data->{type} eq 'error' ) {
-        return [] if $data->{results} eq 'No results found';
         Carp::croak "Remote error: $data->{results}";
     }
 
