@@ -7,12 +7,11 @@ use HTTP::Cookies  qw();
 use Carp           qw();
 
 use WWW::AUR::Maintainer qw();
-use WWW::AUR::URI        qw( pkg_uri );
+use WWW::AUR::URI        qw( pkg_uri pkgsubmit_uri );
 use WWW::AUR             qw( _category_index _useragent );
 
 our @ISA = qw(WWW::AUR::Maintainer);
 
-my $UPLOADURI      = "https://$WWW::AUR::HOST/pkgsubmit.php";
 my $COOKIE_NAME    = 'AURSID';
 my $BAD_LOGIN_MSG  = 'Bad username or password.';
 my $PKG_EXISTS_MSG = ( 'You are not allowed to overwrite the '
@@ -47,9 +46,10 @@ sub new
         unless @_ >= 2;
     my ($name, $password) = @_;
 
-    my $ua   = _useragent( 'cookie_jar' => _new_cookie_jar());
-    my $resp = $ua->post( "https://$WWW::AUR::HOST/index.php",
-                          [ user => $name, passwd => $password ] );
+    my $ua = _useragent( 'cookie_jar' => _new_cookie_jar());
+    $ua->InitTLS;
+    my $resp = $ua->post( "https://$WWW::AUR::HOST/login",
+        [ user => $name, passwd => $password ] );
 
     Carp::croak 'Failed to login to AUR: bad username or password'
         if $resp->content =~ /$BAD_LOGIN_MSG/;
@@ -61,16 +61,16 @@ sub new
 
     my $self = $class->SUPER::new( $name );
     $self->{'useragent'} = $ua;
-    $self->{'sid'} = $self->sid()
+    $self->{'sid'} = _sidcookie($ua)
         or Carp::croak 'Failed to read session cookie from login';
 
     return $self;
 }
 
-sub sid
+sub _sidcookie
 {
-    my ($self) = @_;
-	my $jar = $self->{'useragent'}->cookie_jar;
+    my ($ua) = @_;
+    my $jar = $ua->cookie_jar;
     my $sid;
     $jar->scan(sub { $sid = $_[2] if($_[1] eq 'AURSID') });
     return $sid;
@@ -204,7 +204,7 @@ sub upload
 
     my $catidx = _category_index( $catname );
     my $ua     = $self->{'useragent'};
-    my $resp   = $ua->post( $UPLOADURI,
+    my $resp   = $ua->post( pkgsubmit_uri(),
                             'Content-Type' => 'form-data',
                             'Content'      =>
                             [ category  => $catidx,
