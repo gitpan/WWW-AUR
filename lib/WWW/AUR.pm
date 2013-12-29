@@ -11,7 +11,7 @@ BEGIN {
     # We must define these as soon as possible. They are used in other
     # WWW::AUR modules. Like the ones we use after this block...
 
-    our $VERSION   = '0.17';
+    our $VERSION   = '0.18';
     our $BASEPATH  = '/tmp/WWW-AUR';
     our $HOST      = 'aur.archlinux.org';
     our $UA        = 'WWW::AUR::UserAgent';
@@ -102,15 +102,19 @@ sub _path_params
 }
 
 my @_CATEGORIES = qw{ daemons devel editors emulators games gnome
-                      i18n kde kernels lib modules multimedia
-                      network office science system x11 xfce };
+                      i18n kde lib modules multimedia network office
+                      science system x11 xfce kernels fonts };
 
 #---INTERNAL FUNCTION---
 sub _category_name
 {
-    my ($idx) = @_;
-    return 'undefined' unless $idx > 0 && $idx <= scalar @_CATEGORIES;
-    return $_CATEGORIES[ $idx - 1 ];
+    my ($i) = @_;
+    $i -= 2;
+    if ( $i >= 0 && $i <= $#_CATEGORIES ) {
+        return $_CATEGORIES[$i];
+    } else {
+        return 'undefined';
+    }
 }
 
 #---INTERNAL FUNCTION---
@@ -120,7 +124,7 @@ sub _category_index
     $name = lc $name;
 
     for my $i ( 0 .. $#_CATEGORIES ) {
-        return $i if $name eq $_CATEGORIES[ $i ];
+        return 2 + $i if $name eq $_CATEGORIES[ $i ];
     }
 
     Carp::croak "$name is not a valid category name";
